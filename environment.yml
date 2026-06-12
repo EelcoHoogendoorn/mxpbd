@@ -1,0 +1,11 @@
+name: modal_xpbd
+channels:
+  - conda-forge
+dependencies:
+  - python >= 3.12
+  - numpy
+  - scipy
+  - jax
+  - matplotlib
+  - pillow      # gif encoding in the examples
+  - pytest
