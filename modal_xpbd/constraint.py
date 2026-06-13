@@ -118,13 +118,13 @@ def residual(constraint: PointConstraint, bodies):
 	return pb - pa
 
 
-def twist_jacobian(body: ModalBody, anchor, modes, sign):
+def twist_jacobian(body: ModalBody, anchor, modes):
 	"""[2, 3] derivative of the world anchor position to the body twist (angular, linear, linear)"""
 	r = body.rotation() @ (anchor + modes.T @ body.amplitudes)
-	return sign * jnp.concatenate([perp(r)[:, None], jnp.eye(2)], axis=1)
+	return jnp.concatenate([perp(r)[:, None], jnp.eye(2)], axis=1)
 
 
-def modal_jacobian(body: ModalBody, modes, sign):
+def modal_jacobian(body: ModalBody, modes):
 	"""[2, n_modes] derivative of the world anchor position to the modal amplitudes;
 	simply the sampled mode shapes, rotated to the world frame"""
-	return sign * body.rotation() @ modes.T
+	return body.rotation() @ modes.T

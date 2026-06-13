@@ -38,10 +38,10 @@ def test_pin_jacobians():
 	c = pin(bodies, 0, 1, world_point=(2.0, 0.3))
 	J = autodiff_jacobians(c, bodies)
 
-	assert jnp.allclose(J[0][0], twist_jacobian(bodies[0], c.anchor_a, c.modes_a, -1.0))
-	assert jnp.allclose(J[0][1], modal_jacobian(bodies[0], c.modes_a, -1.0))
-	assert jnp.allclose(J[1][0], twist_jacobian(bodies[1], c.anchor_b, c.modes_b, +1.0))
-	assert jnp.allclose(J[1][1], modal_jacobian(bodies[1], c.modes_b, +1.0))
+	assert jnp.allclose(J[0][0], -twist_jacobian(bodies[0], c.anchor_a, c.modes_a))
+	assert jnp.allclose(J[0][1], -modal_jacobian(bodies[0], c.modes_a))
+	assert jnp.allclose(J[1][0], twist_jacobian(bodies[1], c.anchor_b, c.modes_b))
+	assert jnp.allclose(J[1][1], modal_jacobian(bodies[1], c.modes_b))
 
 
 def test_pin_world_jacobians():
@@ -49,10 +49,10 @@ def test_pin_world_jacobians():
 	c = pin_world(bodies, 0, world_point=(-2.0, 0.0))
 	J = autodiff_jacobians(c, bodies)
 
-	assert jnp.allclose(J[0][0], twist_jacobian(bodies[0], c.anchor_a, c.modes_a, -1.0))
-	assert jnp.allclose(J[0][1], modal_jacobian(bodies[0], c.modes_a, -1.0))
+	assert jnp.allclose(J[0][0], -twist_jacobian(bodies[0], c.anchor_a, c.modes_a))
+	assert jnp.allclose(J[0][1], -modal_jacobian(bodies[0], c.modes_a))
 	assert jnp.allclose(J[1][0], 0)
 	assert jnp.allclose(J[1][1], 0)
 	# the world side carries an ordinary jacobian;
 	# its zero inverse mass keeps the world in place
-	assert jnp.allclose(J[2][0], twist_jacobian(bodies[2], c.anchor_b, c.modes_b, +1.0))
+	assert jnp.allclose(J[2][0], twist_jacobian(bodies[2], c.anchor_b, c.modes_b))

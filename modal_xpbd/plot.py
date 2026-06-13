@@ -4,7 +4,7 @@ from matplotlib.collections import LineCollection
 
 
 def draw_bodies(ax, bodies, color='b', alpha=1.0):
-	for body in bodies:
+	for i, body in enumerate(bodies):
 		points = np.asarray(body.world_points())
 		edges = np.asarray(body.shape.edges)
 		ax.add_collection(LineCollection(points[edges], colors=color, alpha=alpha, linewidths=0.8))

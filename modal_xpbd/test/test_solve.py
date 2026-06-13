@@ -14,7 +14,7 @@ from jax import numpy as jnp
 from modal_xpbd.body import ModalBody
 from modal_xpbd.constraint import pin, pin_world, residual
 from modal_xpbd.decompose import reduce_modes
-from modal_xpbd.solve import jacobian_row, modal_terms, solve_constraints
+from modal_xpbd.solve import modal_jacobians, modal_terms, solve_point_constraints, twist_jacobians
 from modal_xpbd.truss import girder
 
 jax.config.update('jax_enable_x64', True)
@@ -46,29 +46,26 @@ def test_matches_monolithic_solve():
 	lp = [jnp.asarray(rng.normal(size=2) * 0.01) for _ in constraints]
 	lm = [jnp.asarray(rng.normal(size=b.shape.n_modes) * 0.01) for b in bodies]
 
-	(d_twist, d_amplitudes), (dlp, dlm) = solve_constraints(
+	(d_twist, d_amplitudes), (dlp, dlm) = solve_point_constraints(
 		bodies, constraints, dt, previous, (lp, lm),
 		damping=damping, regularization=regularization)
 
 	# the naive reference: one dense solve over the totality of lambdas,
 	# densified from the sparse incidence rows
-	n_b, n_c, n_m = len(bodies), len(constraints), sum(b.shape.n_modes for b in bodies)
-	Jb = [[jnp.zeros((2, 3)) for _ in bodies] for _ in constraints]
-	Jq = [[jnp.zeros((2, b.shape.n_modes)) for b in bodies] for _ in constraints]
-	for i, row in enumerate([jacobian_row(c, bodies) for c in constraints]):
-		for b, (jb, jq) in row.items():
-			Jb[i][b] = jb
-			Jq[i][b] = jq
+	n_b, n_m = len(bodies), sum(b.shape.n_modes for b in bodies)
+	# constraint-major dense jacobians, transposed back from the solver's blocks
+	Jb = twist_jacobians(constraints, bodies).T.data
+	Jq = modal_jacobians(constraints, bodies).T.data
 	J = jnp.block([
 		[jnp.block(Jb), jnp.block(Jq)],
 		[jnp.zeros((n_m, 3 * n_b)), jnp.eye(n_m)],
 	])
-	alpha_m, Cm = modal_terms(bodies, previous, dt, damping)
+	alpha_m, res_m, _ = modal_terms(bodies, previous, dt, damping)
 	alpha = jnp.concatenate(
 		[jnp.full(2, (c.compliance + regularization) / dt ** 2) for c in constraints] + alpha_m)
 	m_inv = jnp.concatenate([b.twist_mass_inv() for b in bodies] + [jnp.ones(n_m)])
 	H = jnp.einsum('id,d,jd->ij', J, m_inv, J) + jnp.diag(alpha)
-	C = jnp.concatenate([residual(c, bodies) for c in constraints] + Cm)
+	C = jnp.concatenate([residual(c, bodies) for c in constraints] + res_m)
 	G = -(C + alpha * jnp.concatenate(lp + lm))
 	dl = jnp.linalg.solve(H, G)
 	du = m_inv * (J.T @ dl)

@@ -8,4 +8,4 @@ from modal_xpbd.truss import Truss, girder
 from modal_xpbd.decompose import ReducedShape, reduce_modes
 from modal_xpbd.body import ModalBody
 from modal_xpbd.constraint import PointConstraint, pin, pin_world
-from modal_xpbd.solve import solve_constraints, step
+from modal_xpbd.solve import solve_point_constraints, step
