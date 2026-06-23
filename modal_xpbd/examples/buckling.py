@@ -44,17 +44,18 @@ jax.config.update('jax_enable_x64', True)
 
 n_girders = 8
 n_cells = 32
-stiffness = 1e12
+stiffness = 1e11
 length = float(n_cells)
 span = n_girders * length
-dt = 0.4
+dt = 0.04
+substeps = 20
 n_frames, steps_per_frame = 120, 1
-crush = 0.1		# prescribed end displacement; quartic in time, so the pop lands early-mid
+crush = 0.15		# prescribed end displacement; quartic in time, so the pop lands early-mid
 gravity = (0.0, 0.0)
 
 shape = reduce_modes(girder(n_cells, stiffness=stiffness), n_modes=8)
 bodies = [
-	ModalBody.rest(shape, position=((i + 0.5) * length, 0.0))
+	ModalBody.rest(shape, position=((i + 0.5) * length, 0.0), damping=3)
 	for i in range(n_girders)
 ] + [ModalBody.world()]
 splices = [
@@ -89,12 +90,12 @@ step_jit = jax.jit(step, static_argnames=('substeps',))
 frames, bow, applied = [], [], []
 state = bodies
 for f in range(n_frames):
-	d = crush * (f / n_frames) ** 4
+	d = crush * (f / n_frames)
 	constraints = splices + crushed(d)
 	for i in range(steps_per_frame):
 		state = step_jit(
-			state, [constraints], dt=dt, substeps=2,
-			gravity=gravity, damping=0.1)
+			state, [constraints], dt=dt, substeps=substeps,
+			gravity=gravity)
 	frames.append(state)
 	bow.append(float((state[n_girders // 2 - 1].position[1] + state[n_girders // 2].position[1]) / 2))
 	applied.append(d)
@@ -115,7 +116,7 @@ ax_t.legend()
 fig.savefig(Path(__file__).parent / 'buckling.png', dpi=120)
 
 # animated gif
-fig_anim, ax_anim = plt.subplots(figsize=(10, 2.6))
+fig_anim, ax_anim = plt.subplots(figsize=(10, 3))
 
 
 def draw_frame(i):
@@ -128,6 +129,6 @@ def draw_frame(i):
 	ax_anim.set_yticks([])
 
 
-save_gif(fig_anim, draw_frame, n_frames, Path(__file__).parent / 'buckling.gif', fps=25)
+save_gif(fig_anim, draw_frame, n_frames, Path(__file__).parent / 'buckling.gif', fps=50)
 
 plt.show()

@@ -5,6 +5,7 @@ over bodies carrying both rigid (se2) and modal degrees of freedom.
 Pure jax + numpy/scipy; no external geometry or physics dependencies.
 """
 from modal_xpbd.truss import Truss, girder
+from modal_xpbd.quad import QuadMesh, quad_strip
 from modal_xpbd.decompose import ReducedShape, reduce_modes
 from modal_xpbd.body import ModalBody
 from modal_xpbd.constraint import PointConstraint, pin, pin_world

@@ -86,6 +86,10 @@ from jax import numpy as jnp
 from modal_xpbd.block import Block, beinsum, solve_block_cholesky
 from modal_xpbd.constraint import localize, modal_jacobian, residual, twist_jacobian
 
+# relative regularization floor for the point schur, as a fraction of the system
+# scale; sets the worst-case condition number (~ 1 / RCOND) of the dense solve
+RCOND = 1e-9
+
 
 def twist_jacobians(constraints, bodies):
 	"""body-major block matrix JbT of point-constraint twist jacobians, transposed
@@ -122,11 +126,11 @@ def modal_jacobians(constraints, bodies):
 		for b, body in enumerate(bodies)])
 
 
-def modal_terms(bodies, previous, dt: float, damping: float):
+def modal_terms(bodies, previous, dt: float):
 	"""effective compliance and residual of the damped modal constraints
 
 	Per mode, the dynamics to capture is the damped oscillator (unit modal mass),
-	with `damping` the damping ratio zeta:
+	with each body's `damping` the damping ratio zeta:
 
 		q'' + 2 zeta omega q' + omega**2 q = f
 
@@ -153,14 +157,14 @@ def modal_terms(bodies, previous, dt: float, damping: float):
 
 	bodies, previous: [n_bodies] ModalBody, current and at the start of the substep
 
-	Returns (alpha_m, res_m, B_inv), all [n_bodies] of [n_modes]:
+	Returns (alpha_m, res_m, B_inv) as Blocks, each [n_bodies] of [n_modes]:
 	effective compliance over dt**2, effective constraint residual, and the inverse
 	of the diagonal modal block B = modal mass inverse + alpha_m = 1 + alpha_m
 	(unit modal mass plus compliance), the modal mobility shared by both the
 	isolated modal solve and the coupled block solve.
-	Lists of [n_modes] arrays are ragged: each body brings its own mode count.
+	The blocks are ragged: each body brings its own mode count.
 	"""
-	gamma = [2 * damping * b.shape.omega * b.shape.compliance / dt for b in bodies]
+	gamma = [2 * b.damping * b.shape.omega * b.shape.compliance / dt for b in bodies]
 	alpha_m = [
 		b.shape.compliance / dt ** 2 / (1 + g)
 		for b, g in zip(bodies, gamma)]
@@ -168,10 +172,10 @@ def modal_terms(bodies, previous, dt: float, damping: float):
 		(b.amplitudes + g * (b.amplitudes - p.amplitudes)) / (1 + g)
 		for b, p, g in zip(bodies, previous, gamma)]
 	B_inv = [1 / (1 + am) for am in alpha_m]
-	return alpha_m, res_m, B_inv
+	return Block(alpha_m), Block(res_m), Block(B_inv)
 
 
-def solve_mode_constraint(bodies, previous, dt, damping):
+def solve_mode_constraint(bodies, previous, dt):
 	"""relax every modal constraint in closed form, uncoupled from point constraints
 
 	A body with no point constraint on it relaxes its modal constraints alone.
@@ -194,10 +198,10 @@ def solve_mode_constraint(bodies, previous, dt, damping):
 
 	Returns (d_amplitudes, lm), both [n_bodies] of [n_modes].
 	"""
-	_, res_m, B_inv = modal_terms(bodies, previous, dt, damping)
-	lm = [-r * bi for r, bi in zip(res_m, B_inv)]
-	d_amplitudes = lm		# Mq_inv lm; the modal mass is the identity
-	return d_amplitudes, lm
+	_, res_m, B_inv = modal_terms(bodies, previous, dt)
+	lm = -(res_m * B_inv)							# modal reaction
+	d_amplitudes = lm								# Mq_inv lm; the modal mass is the identity
+	return d_amplitudes.data, lm.data
 
 
 def schur_solve(Jb, Jq, alpha_p, alpha_m, Gp, Gm, Mb_inv, B_inv):
@@ -250,16 +254,22 @@ def schur_solve(Jb, Jq, alpha_p, alpha_m, Gp, Gm, Mb_inv, B_inv):
 	W = B_inv * alpha_m										# modal mobility
 	u = B_inv * Gm
 	S = beinsum('ki,k,kj->ij', Jb, Mb_inv, Jb) + beinsum('ki,k,kj->ij', Jq, W, Jq)
+	# relative regularization: a diagonal floor proportional to the system's own
+	# scale, so the schur stays well conditioned in any mass/stiffness/dt regime
+	# (an absolute floor only conditions one regime). The near-null direction of a
+	# redundant splice pair is lifted to ~ RCOND * scale, bounding the condition
+	# number near 1 / RCOND while leaving the rigid limit intact (joints stay rigid
+	# to ~ RCOND). This is the smooth, spd-preserving cousin of a pinv rcond cutoff.
+	scale = S.trace() / (2 * len(alpha_p))					# mean diagonal magnitude of the schur
 	for i, a in enumerate(alpha_p):
-		S[i][i] = S[i][i] + jnp.eye(2) * a					# add the point compliance to the diagonal
+		S[i][i] = S[i][i] + jnp.eye(2) * (a + RCOND * scale)	# physical compliance + relative floor
 	dlp = solve_block_cholesky(S, Gp - Jq.T @ u)
 	fb, fq = Jb @ dlp, Jq @ dlp
 	dlm = u - B_inv * fq
 	return (Mb_inv * fb, fq + dlm), (dlp, dlm)
 
 
-def solve_point_constraints(bodies, constraints, dt, previous, lambdas,
-                            damping=0.0, regularization=1e-9):
+def solve_point_constraints(bodies, constraints, dt, previous, lambdas):
 	"""relax one non-empty group of point constraints,
 	coupled with the modal constraints of the given bodies
 
@@ -272,10 +282,10 @@ def solve_point_constraints(bodies, constraints, dt, previous, lambdas,
 		lm: [n_bodies] of [n_modes], modal constraint lambdas
 		incremental xpbd: these enter the right hand side as -alpha * lambda;
 		with zero lambdas this is a plain single solve
-	regularization: a small compliance added to every point constraint:
-		it keeps the system regular when constraints are redundant,
-		which constraint pairs on near-rigid bodies inherently are
-		(a splice pair constrains the bolt-to-bolt distance, which only flex can absorb)
+	Each constraint's regularization (a small compliance floor, see PointConstraint)
+	keeps the system regular when constraints are redundant, which constraint pairs
+	on near-rigid bodies inherently are (a splice pair constrains the bolt-to-bolt
+	distance, which only flex can absorb).
 
 	Returns ((d_twist, d_amplitudes), (dlp, dlm)):
 	d_twist: [n_bodies] of [3], position level twist displacements
@@ -285,9 +295,8 @@ def solve_point_constraints(bodies, constraints, dt, previous, lambdas,
 	# setup: physics to algebra
 	point_lambda, modal_lambda = Block(lambdas[0]), Block(lambdas[1])
 	twist_mass_inv = Block([b.twist_mass_inv() for b in bodies])
-	modal_compliance, modal_residual, modal_block_inv = (
-		Block(x) for x in modal_terms(bodies, previous, dt, damping))
-	point_compliance = (Block([c.compliance for c in constraints]) + regularization) / dt ** 2
+	modal_compliance, modal_residual, modal_block_inv = modal_terms(bodies, previous, dt)
+	point_compliance = Block([c.compliance + c.regularization for c in constraints]) / dt ** 2
 	point_residual = Block([residual(c, bodies) for c in constraints])
 	twist_jac = twist_jacobians(constraints, bodies)
 	modal_jac = modal_jacobians(constraints, bodies)
@@ -304,8 +313,7 @@ def solve_point_constraints(bodies, constraints, dt, previous, lambdas,
 	return (d_twist.data, d_amplitudes.data), (dlp.data, dlm.data)
 
 
-def step(bodies, groups, dt, substeps: int = 1, gravity=(0.0, 0.0),
-		damping=0.0, regularization=1e-9):
+def step(bodies, groups, dt, substeps: int = 1, gravity=(0.0, 0.0)):
 	"""advance the system by one timestep of dt, using a number of xpbd substeps
 
 	groups is a list of non-empty point constraint groups; each group is relaxed
@@ -350,7 +358,7 @@ def step(bodies, groups, dt, substeps: int = 1, gravity=(0.0, 0.0),
 		# no place in the group pass below: the modal rows of touched bodies are
 		# included in every group solve, and being exactly linear in q each solve
 		# leaves them converged; untouched bodies stay converged as left here.
-		d_amplitudes, lm = solve_mode_constraint(bodies, previous, h, damping)
+		d_amplitudes, lm = solve_mode_constraint(bodies, previous, h)
 		bodies = [b.replace(amplitudes=b.amplitudes + da) for b, da in zip(bodies, d_amplitudes)]
 
 		# each group relaxed once: point lambdas start fresh, while the modal
@@ -360,8 +368,7 @@ def step(bodies, groups, dt, substeps: int = 1, gravity=(0.0, 0.0),
 			(d_twist, d_amplitudes), (_, dlm) = solve_point_constraints(
 				[bodies[j] for j in support], group, h,
 				previous=[previous[j] for j in support],
-				lambdas=([jnp.zeros(2) for _ in group], [lm[j] for j in support]),
-				damping=damping, regularization=regularization)
+				lambdas=([jnp.zeros(2) for _ in group], [lm[j] for j in support]))
 			for k, j in enumerate(support):
 				bodies[j] = bodies[j].displace(d_twist[k], d_amplitudes[k])
 				lm[j] = lm[j] + dlm[k]

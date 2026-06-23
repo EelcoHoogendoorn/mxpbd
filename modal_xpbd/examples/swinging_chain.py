@@ -66,7 +66,7 @@ shapes[0] = shapes[0].rigid()
 colors = ['dimgray'] + [f'C{i}' for i in range(n_girders - 1)]
 labels = ['rigid'] + [f'EA = {stiffness / 4 ** i:.0e}' for i in range(1, n_girders)]
 bodies = [
-	ModalBody.rest(shape, position=((i + 0.5) * length, 0.0))
+	ModalBody.rest(shape, position=((i + 0.5) * length, 0.0), damping=damping)
 	for i, shape in enumerate(shapes)
 ] + [ModalBody.world()]
 # single pins: hinges at the top corner of each interface, and at the support
@@ -83,7 +83,7 @@ frames, energy, violation = [], [], []
 state = bodies
 for f in range(n_frames):
 	for i in range(steps_per_frame):
-		state = step_jit(state, [hinges], dt=dt, substeps=4, gravity=gravity, damping=damping)
+		state = step_jit(state, [hinges], dt=dt, substeps=4, gravity=gravity)
 	frames.append(state)
 	energy.append(sum(float(b.energy(gravity)) for b in state))
 	violation.append(max(float(jnp.linalg.norm(residual(c, state))) for c in hinges))

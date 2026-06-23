@@ -10,20 +10,26 @@ def draw_bodies(ax, bodies, color='b', alpha=1.0):
 		ax.add_collection(LineCollection(points[edges], colors=color, alpha=alpha, linewidths=0.8))
 
 
-def save_gif(fig, draw_frame, n_frames, path, fps=25, dpi=80, colors=16):
+def save_gif(fig, draw_frame, n_frames, path, fps=25, dpi=80, colors=16, supersample=4):
 	"""render an animation to a gif quantized to a single shared palette
 
-	Line art on a plain background tolerates a small palette with no visible loss,
-	and one undithered palette across all frames compresses far better than
-	the per-frame adaptive palettes of the stock pillow writer.
+	Line art on a plain background tolerates a modest palette, and one undithered
+	palette shared across all frames compresses far better than the per-frame
+	adaptive palettes of the stock pillow writer. Rendering at `supersample` times
+	the dpi and downscaling with lanczos gives subpixel-antialiased edges; the
+	palette must then be wide enough to carry the antialiasing ramp, or the soft
+	edges band and shimmer frame to frame as lines cross pixel boundaries.
 	"""
 	from PIL import Image
-	fig.set_dpi(dpi)
+	fig.set_dpi(dpi * supersample)
 	images = []
 	for i in range(n_frames):
 		draw_frame(i)
 		fig.canvas.draw()
-		images.append(Image.fromarray(np.asarray(fig.canvas.buffer_rgba())[..., :3]))
+		im = Image.fromarray(np.asarray(fig.canvas.buffer_rgba())[..., :3])
+		if supersample != 1:
+			im = im.resize((im.width // supersample, im.height // supersample), Image.LANCZOS)
+		images.append(im)
 	# fit the shared palette on a mosaic of sampled frames
 	w, h = images[0].size
 	sample = images[:: max(1, n_frames // 4)][:4]

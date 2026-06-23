@@ -39,6 +39,7 @@ class ModalBody:
 	angular_velocity: jax.Array	# scalar
 	velocity: jax.Array			# [2] com world velocity
 	rates: jax.Array			# [n_modes] modal amplitude rates
+	damping: jax.Array			# scalar; modal damping ratio zeta (a material constant, not state)
 
 	@classmethod
 	def world(cls) -> "ModalBody":
@@ -63,7 +64,7 @@ class ModalBody:
 		return cls.rest(shape)
 
 	@classmethod
-	def rest(cls, shape: ReducedShape, angle=0.0, position=(0.0, 0.0)) -> "ModalBody":
+	def rest(cls, shape: ReducedShape, angle=0.0, position=(0.0, 0.0), damping=0.0) -> "ModalBody":
 		k = shape.n_modes
 		return cls(
 			shape=shape,
@@ -73,6 +74,7 @@ class ModalBody:
 			angular_velocity=jnp.zeros(()),
 			velocity=jnp.zeros(2),
 			rates=jnp.zeros(k),
+			damping=jnp.asarray(damping) * 1.0,
 		)
 
 	def replace(self, **kwargs) -> "ModalBody":

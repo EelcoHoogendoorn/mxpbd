@@ -30,13 +30,13 @@ def test_cantilever_sag_visual():
 
 	def settle(n_modes):
 		shape = reduce_modes(truss, n_modes)
-		bodies = [ModalBody.rest(shape), ModalBody.world()]
+		bodies = [ModalBody.rest(shape, damping=0.4), ModalBody.world()]
 		constraints = [
 			pin_world(bodies, 0, world_point=np.asarray(shape.vertices[0])),
 			pin_world(bodies, 0, world_point=np.asarray(shape.vertices[9])),
 		]
 		for i in range(1000):
-			bodies = step_jit(bodies, [constraints], dt=0.05, substeps=2, gravity=gravity, damping=0.4)
+			bodies = step_jit(bodies, [constraints], dt=0.05, substeps=2, gravity=gravity)
 		return bodies[0]
 
 	settled = {k: settle(k) for k in [4, 12, 33]}

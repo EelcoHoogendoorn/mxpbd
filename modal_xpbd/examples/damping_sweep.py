@@ -40,19 +40,18 @@ shape = reduce_modes(girder(16, stiffness=400.0), n_modes=6)
 omega = float(shape.omega[mode])
 period = 2 * np.pi / omega
 dt = period / 80
-# bend the girder into its lowest mode, to be released from rest
-bent = ModalBody.rest(shape).replace(
-	amplitudes=jnp.zeros(shape.n_modes).at[mode].set(amplitude))
-
 step_jit = jax.jit(step, static_argnames=('substeps',))
 
 
 def simulate(zeta):
+	# bend the girder into its lowest mode at damping ratio zeta, released from rest
+	bent = ModalBody.rest(shape, damping=zeta).replace(
+		amplitudes=jnp.zeros(shape.n_modes).at[mode].set(amplitude))
 	bodies = [bent]
 	frames, trace = [], []
 	for f in range(n_frames):
 		for s in range(steps_per_frame):
-			bodies = step_jit(bodies, [], dt=dt, substeps=substeps, damping=zeta)
+			bodies = step_jit(bodies, [], dt=dt, substeps=substeps)
 		frames.append(bodies)
 		trace.append(float(bodies[0].amplitudes[mode]))
 	return frames, np.asarray(trace)

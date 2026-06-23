@@ -42,9 +42,10 @@ class PointConstraint:
 	modes_a: jax.Array = None		# [ka, 2] mode shapes sampled at anchor_a
 	modes_b: jax.Array = None		# [kb, 2]
 	compliance: jax.Array = None	# scalar
+	regularization: jax.Array = None	# scalar; small compliance floor keeping redundant pairs regular
 
 
-def pin(bodies, a: int, b: int, world_point, compliance=0.0) -> PointConstraint:
+def pin(bodies, a: int, b: int, world_point, compliance=0.0, regularization=1e-16) -> PointConstraint:
 	"""pin the vertices of bodies[a] and bodies[b] nearest to world_point together"""
 	def sample(i):
 		body = bodies[i]
@@ -58,10 +59,11 @@ def pin(bodies, a: int, b: int, world_point, compliance=0.0) -> PointConstraint:
 		anchor_a=anchor_a, anchor_b=anchor_b,
 		modes_a=modes_a, modes_b=modes_b,
 		compliance=jnp.asarray(compliance) * 1.0,
+		regularization=jnp.asarray(regularization) * 1.0,
 	)
 
 
-def pin_world(bodies, a: int, world_point, compliance=0.0) -> PointConstraint:
+def pin_world(bodies, a: int, world_point, compliance=0.0, regularization=1e-16) -> PointConstraint:
 	"""pin the vertex of bodies[a] nearest to world_point to that world point
 
 	The world side is the world body: its frame is the world frame,
@@ -77,6 +79,7 @@ def pin_world(bodies, a: int, world_point, compliance=0.0) -> PointConstraint:
 		anchor_a=anchor_a, anchor_b=jnp.asarray(world_point) * 1.0,
 		modes_a=modes_a, modes_b=jnp.zeros((0, 2)),
 		compliance=jnp.asarray(compliance) * 1.0,
+		regularization=jnp.asarray(regularization) * 1.0,
 	)
 
 

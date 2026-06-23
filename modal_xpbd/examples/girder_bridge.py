@@ -33,12 +33,12 @@ gravity = (0.0, -1.0)
 dt = 0.05
 length = float(n_cells)
 n_frames, steps_per_frame = 180, 2
-damping = 0.1
+damping = 64.0
 stiffness = 6e5
 
 shape = reduce_modes(girder(n_cells, stiffness=stiffness), n_modes=8)
 bodies = [
-	ModalBody.rest(shape, position=((i + 0.5) * length, 0.5))
+	ModalBody.rest(shape, position=((i + 0.5) * length, 0.5), damping=damping)
 	for i in range(n_girders)
 ] + [ModalBody.world()]
 # splice pairs at each girder interface; supports at the outer bottom corners
@@ -61,8 +61,8 @@ state = bodies
 for f in range(n_frames):
 	for i in range(steps_per_frame):
 		state = step_jit(
-			state, [constraints], dt=dt, substeps=2,
-			gravity=gravity, damping=damping)
+			state, [constraints], dt=dt, substeps=1,
+			gravity=gravity)
 	frames.append(state)
 	tip.append(state[n_girders // 2 - 1].world_points()[n_cells, 1])	# midspan bottom node
 tip = np.asarray(tip)

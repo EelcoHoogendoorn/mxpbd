@@ -20,12 +20,12 @@ jax.config.update('jax_enable_x64', True)
 step_jit = jax.jit(step, static_argnames=('substeps',))
 
 
-def spliced_pair(stiffness=100.0, n_modes=6):
+def spliced_pair(stiffness=100.0, n_modes=6, damping=0.0):
 	"""two girders joined end to end by a splice: a pair of point constraints"""
 	shape = reduce_modes(girder(4, stiffness=stiffness), n_modes)
 	bodies = [
-		ModalBody.rest(shape, position=(2.0, 0.5)),
-		ModalBody.rest(shape, position=(6.0, 0.5)),
+		ModalBody.rest(shape, position=(2.0, 0.5), damping=damping),
+		ModalBody.rest(shape, position=(6.0, 0.5), damping=damping),
 		ModalBody.world(),
 	]
 	splice = [
@@ -37,13 +37,13 @@ def spliced_pair(stiffness=100.0, n_modes=6):
 
 def test_pin_convergence():
 	"""a violated constraint is projected out within a few steps"""
-	bodies, splice = spliced_pair()
+	bodies, splice = spliced_pair(damping=0.5)
 	# misplace the second body so the splice starts out violated
 	bodies[1] = bodies[1].replace(position=jnp.asarray([6.2, 0.6]), angle=jnp.asarray(0.1))
 
 	violation = [jnp.linalg.norm(jnp.concatenate([residual(c, bodies) for c in splice]))]
 	for i in range(5):
-		bodies = step_jit(bodies, [splice], dt=0.05, substeps=1, damping=0.5)
+		bodies = step_jit(bodies, [splice], dt=0.05, substeps=1)
 		violation.append(jnp.linalg.norm(jnp.concatenate([residual(c, bodies) for c in splice])))
 
 	assert violation[-1] < violation[0] * 1e-3
@@ -125,13 +125,13 @@ def test_unresolved_modes():
 	gravity = (0.0, -0.5)
 
 	def settle(dt, n):
-		bodies = [ModalBody.rest(shape), ModalBody.world()]
+		bodies = [ModalBody.rest(shape, damping=0.4), ModalBody.world()]
 		groups = [[
 			pin_world(bodies, 0, world_point=np.asarray(shape.vertices[0])),
 			pin_world(bodies, 0, world_point=np.asarray(shape.vertices[5])),
 		]]
 		for i in range(n):
-			bodies = step_jit(bodies, groups, dt=dt, substeps=1, gravity=gravity, damping=0.4)
+			bodies = step_jit(bodies, groups, dt=dt, substeps=1, gravity=gravity)
 		return float(bodies[0].world_points()[4, 1] - shape.vertices[4, 1])
 
 	sag_fine, sag_coarse = settle(0.02, 800), settle(0.1, 300)
@@ -161,7 +161,7 @@ def test_bridge_matches_nonlinear_fem():
 	assert abs(nonlinear) > abs(linear) * 1.5	# well into the softening regime
 
 	shape = reduce_modes(girder(n_cells, stiffness=1e4), 8)
-	bodies = [ModalBody.rest(shape, position=((i + 0.5) * length, 0.5)) for i in range(n_girders)] + [ModalBody.world()]
+	bodies = [ModalBody.rest(shape, position=((i + 0.5) * length, 0.5), damping=0.5) for i in range(n_girders)] + [ModalBody.world()]
 	groups = [[
 		c for i in range(n_girders - 1) for c in (
 			pin(bodies, i, i + 1, world_point=((i + 1) * length, 0.0)),
@@ -171,7 +171,7 @@ def test_bridge_matches_nonlinear_fem():
 		pin_world(bodies, n_girders - 1, world_point=(float(span), 0.0)),
 	]]
 	for i in range(3500):
-		bodies = step_jit(bodies, groups, dt=0.05, substeps=2, gravity=gravity, damping=0.5)
+		bodies = step_jit(bodies, groups, dt=0.05, substeps=2, gravity=gravity)
 	sag = float(bodies[n_girders // 2 - 1].world_points()[n_cells, 1])
 
 	assert abs(sag - nonlinear) < abs(nonlinear) * 0.2		# truncation-level agreement
@@ -189,7 +189,7 @@ def test_groups_track_block_solve():
 	shape = reduce_modes(girder(4, stiffness=1e3), 6)
 
 	def simulate(grouping):
-		bodies = [ModalBody.rest(shape, position=((i + 0.5) * 4.0, 0.5)) for i in range(3)] + [ModalBody.world()]
+		bodies = [ModalBody.rest(shape, position=((i + 0.5) * 4.0, 0.5), damping=0.2) for i in range(3)] + [ModalBody.world()]
 		s0 = [pin(bodies, 0, 1, world_point=(4.0, 0.0)), pin(bodies, 0, 1, world_point=(4.0, 1.0))]
 		s1 = [pin(bodies, 1, 2, world_point=(8.0, 0.0)), pin(bodies, 1, 2, world_point=(8.0, 1.0))]
 		w = [pin_world(bodies, 0, world_point=(0.0, 0.0))]
@@ -197,7 +197,7 @@ def test_groups_track_block_solve():
 		for i in range(40):
 			bodies = step_jit(
 				bodies, groups, dt=0.05, substeps=2,
-				gravity=(0.0, -1.0), damping=0.2)
+				gravity=(0.0, -1.0))
 		return np.concatenate([np.asarray(b.position) for b in bodies])
 
 	distance = np.linalg.norm(simulate('split') - simulate('single'))
@@ -250,14 +250,14 @@ def test_cantilever_sag_matches_fem():
 
 	def settled_sag_error(n_modes):
 		shape = reduce_modes(truss, n_modes)
-		bodies = [ModalBody.rest(shape), ModalBody.world()]
+		bodies = [ModalBody.rest(shape, damping=0.4), ModalBody.world()]
 		# clamp the left edge: a pair of point constraints, not a joint abstraction
 		constraints = [
 			pin_world(bodies, 0, world_point=np.asarray(shape.vertices[0])),
 			pin_world(bodies, 0, world_point=np.asarray(shape.vertices[9])),
 		]
 		for i in range(1000):
-			bodies = step_jit(bodies, [constraints], dt=0.05, substeps=2, gravity=gravity, damping=0.4)
+			bodies = step_jit(bodies, [constraints], dt=0.05, substeps=2, gravity=gravity)
 		assert jnp.linalg.norm(bodies[0].velocity) < 5e-3
 		sag = bodies[0].world_points() - shape.vertices
 		return abs(sag[tip, 1] - reference[tip, 1]) / abs(reference[tip, 1])

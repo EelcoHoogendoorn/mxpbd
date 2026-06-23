@@ -25,8 +25,9 @@ rng = np.random.default_rng(0)
 def test_matches_monolithic_solve():
 	shape = reduce_modes(girder(4, stiffness=200.0), 5)
 	k = shape.n_modes
+	dt, damping = 0.05, 0.3
 	bodies = [
-		ModalBody.rest(shape, angle=a, position=((i + 0.5) * 4.0, 0.5))
+		ModalBody.rest(shape, angle=a, position=((i + 0.5) * 4.0, 0.5), damping=damping)
 		for i, a in enumerate([0.1, -0.2, 0.15])
 	]
 	bodies = [b.replace(amplitudes=jnp.asarray(rng.normal(size=k) * 0.1)) for b in bodies]
@@ -41,14 +42,12 @@ def test_matches_monolithic_solve():
 		pin(bodies, 1, 2, world_point=(8.0, 0.0)),
 		pin_world(bodies, 0, world_point=(0.0, 0.0)),
 	]
-	dt, damping, regularization = 0.05, 0.3, 1e-9
 	# nonzero accumulated lambdas, so the incremental terms are exercised
 	lp = [jnp.asarray(rng.normal(size=2) * 0.01) for _ in constraints]
 	lm = [jnp.asarray(rng.normal(size=b.shape.n_modes) * 0.01) for b in bodies]
 
 	(d_twist, d_amplitudes), (dlp, dlm) = solve_point_constraints(
-		bodies, constraints, dt, previous, (lp, lm),
-		damping=damping, regularization=regularization)
+		bodies, constraints, dt, previous, (lp, lm))
 
 	# the naive reference: one dense solve over the totality of lambdas,
 	# densified from the sparse incidence rows
@@ -60,12 +59,12 @@ def test_matches_monolithic_solve():
 		[jnp.block(Jb), jnp.block(Jq)],
 		[jnp.zeros((n_m, 3 * n_b)), jnp.eye(n_m)],
 	])
-	alpha_m, res_m, _ = modal_terms(bodies, previous, dt, damping)
+	alpha_m, res_m, _ = modal_terms(bodies, previous, dt)
 	alpha = jnp.concatenate(
-		[jnp.full(2, (c.compliance + regularization) / dt ** 2) for c in constraints] + alpha_m)
+		[jnp.full(2, (c.compliance + c.regularization) / dt ** 2) for c in constraints] + alpha_m.data)
 	m_inv = jnp.concatenate([b.twist_mass_inv() for b in bodies] + [jnp.ones(n_m)])
 	H = jnp.einsum('id,d,jd->ij', J, m_inv, J) + jnp.diag(alpha)
-	C = jnp.concatenate([residual(c, bodies) for c in constraints] + res_m)
+	C = jnp.concatenate([residual(c, bodies) for c in constraints] + res_m.data)
 	G = -(C + alpha * jnp.concatenate(lp + lm))
 	dl = jnp.linalg.solve(H, G)
 	du = m_inv * (J.T @ dl)

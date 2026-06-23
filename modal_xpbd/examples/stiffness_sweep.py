@@ -37,7 +37,7 @@ step_jit = jax.jit(step, static_argnames=('substeps',))
 
 def simulate(shape):
 	bodies = [
-		ModalBody.rest(shape, position=((i + 0.5) * length, 0.5))
+		ModalBody.rest(shape, position=((i + 0.5) * length, 0.5), damping=damping)
 		for i in range(n_girders)
 	] + [ModalBody.world()]
 	# splice pairs at each girder interface; supports at the outer bottom corners
@@ -59,7 +59,7 @@ def simulate(shape):
 		for j in range(steps_per_frame):
 			state = step_jit(
 				state, [constraints], dt=dt, substeps=2,
-				gravity=gravity, damping=damping)
+				gravity=gravity)
 		frames.append(state)
 		tip.append(state[n_girders // 2 - 1].world_points()[n_cells, 1])	# midspan bottom node
 	return frames, np.asarray(tip)

@@ -1,43 +1,26 @@
 # Modal XPBD (MXPBD)
-This is a minimal demonstration of the concept of constrained  rigid body dynamics 
-enriched with modal flexibility, implemented in JAX, in 2d for simplicity.
 
-The motivation is that the most commonly modelled systems are 
-neither ideal rigid bodies, nor jello, but for improved realism require the 
-modelling of small flex that can be crucial to the true dynamics of relevant systems.
-Iterative flexible body solvers are in practice limited to materials considerably
-more compliant than those of engineering interest — what converges acceptably
-tends toward jello — leaving the stiff but flexible regime poorly served.
+A minimal 2D demonstration, in JAX, of rigid-body dynamics enriched with modal
+flexibility, solved XPBD-style. The X extends PBD with rotational rigid-body DOFs; the M
+extends those with modal DOFs, treating modal stiffness as constraint compliance.
 
-However, irreduced flexible simulation is usually infeasible, for performance
-reasons or numerical stability. Nor can we always model flex through joint compliance; a robot arm is typically orders of 
-magnitude more compliant in torsion than it is axially, for instance.
-
-Constraints are solved XPBD-style, by projecting degrees of freedom onto the
-constraint manifold in a least-action sense. 
-
-Hence we name this MXPBD; where the X extends PBD with rotational rigid body DOFs,
-the M extends the rigid body DOFs with modal DOFs
+Most systems worth modelling are neither ideal rigid bodies nor jello: they are
+stiff yet slightly flexible, and that small flex can be crucial to their dynamics.
+Iterative flexible-body solvers converge acceptably only well into the jello range,
+full flexible simulation is often infeasible (performance, stability), and joint
+compliance can't express anisotropic flex (a robot arm is orders of magnitude
+softer in torsion than axially). MXPBD targets that underserved stiff-flexible regime.
 
 ## Examples
 
-The bridge below consists of girders of just a few modal bodies each. If we were to simulate all its elements directly,
-a geometry of this aspect ratio would be an extremely stiff system, requiring a lot of 
-compute to timestep. But the small number of modal bodies are well conditioned,
-and easily solved with a quasi-explicit PBD style update mechanism.
+A thin solid steel rod (1m x 4mm), built from 1024 finite elements, crushed by a prescribed end displacement, pops as it crosses its euler
+load. This stiff system is accurately and stably simulated with a large timestep, and only explicit local updates. This requires both multiple bodies as a single linearized modal body would not support buckling, and efficient high stiffness block solves between those modal bodies (per-constraint solving would converge very poorly)
+(`buckling_quad.py`):
 
-The same bridge at three stiffness levels; solved with the same efficiency using efficient local updates
-(`stiffness_sweep.py`):
-
-<img src="./modal_xpbd/examples/stiffness_sweep.gif" alt="the bridge at three stiffness levels, the grey run with zero compliance">
-
-A thin (256x1) yet very stiff clamped beam, crushed by a prescribed end displacement, pops as it crosses its euler
-load (`buckling.py`):
-
-<img src="./modal_xpbd/examples/buckling.gif" alt="a clamped beam pops as the prescribed end displacement crosses its euler load">
+<img src="./modal_xpbd/examples/buckling_quad.gif" alt="a clamped rod pops as the prescribed end displacement crosses its euler load">
 
 A chain of flexible girders whips through full rotations, demonstrating large angle displacements together with various levels of compliance; zero compliance at the top, but noticeable compliance at the bottom;
-anything in between will work together efficiently.
+any combination of stiffness ratios will work together efficiently.
 (`swinging_chain.py`):
 
 <img src="./modal_xpbd/examples/swinging_chain.gif" alt="a hinged chain of girders, rigid at the pin to soft at the tip, whips through full rotations">
@@ -50,19 +33,7 @@ creep, all at one and the same timestep, each trace on the analytic damped oscil
 
 ## Key ideas
 
-**Modal stiffness as XPBD compliance.** Each mode contributes one elastic constraint
-whose value is simply its amplitude, with compliance `1 / omega**2`. This is the XPBD
-treatment of stiff potentials: arbitrarily stiff modes are unconditionally stable, and
-the formulation degrades gracefully to a rigid body as `omega -> inf`. Explicit
-integration of modal forces would instead demand `dt < 2 / omega_max`.
-
-** Point constraints can be solved in a blockwise fashion.** On a flexible body there
-is no such thing as a lumped joint: a hinge line or weld frame is ill-defined on a
-deforming body. Yet to counter geometric stiffness point constraints need to be solvable 
-in a block fashion rather than relaxed one at a time. 
-(girders in the above example are joined by point-pairs solved simultaneously)
-
-**Modes only add low overhead.** Solving a group of constraints (point reactions, modal
+**Adding modes to a body adds minimal overhead.** Solving a group of constraints (point reactions, modal
 reactions) has a diagonal modal block, eliminated analytically: the point constraints
 see each mode as a scalar mobility `alpha / (1 + alpha)`, interpolating between mass
 limited (soft modes) and immobile (the rigid limit). The dense solve is over the joint
@@ -70,6 +41,18 @@ reactions only, assembled over constraint-body incidences: a modal body has the 
 time complexity as a rigid body in the solve, regardless of its number of modes.
 Contrast with FEM, where every flex DOF lands in the global system,
 and adds a super-linear cost to the solve.
+
+**Modal stiffness as XPBD compliance.** Each mode contributes one elastic constraint
+whose value is simply its amplitude, with compliance `1 / omega**2`. This is the XPBD
+treatment of stiff potentials: arbitrarily stiff modes are unconditionally stable, and
+the formulation degrades gracefully to a rigid body as `omega -> inf`. Explicit
+integration of modal forces would instead demand `dt < 2 / omega_max`.
+
+**Point constraints can be solved in a blockwise fashion.** On a flexible body there
+is no such thing as a lumped joint: a hinge line or weld frame is ill-defined on a
+deforming body. Yet to counter geometric stiffness point constraints need to be solvable 
+in a block fashion rather than relaxed one at a time. 
+(girders in the above example are joined by point-pairs solved simultaneously)
 
 **High frequency unresolved modes are low-passed, not unstable.** Per mode, a substep of the
 projection acts as implicit euler: the amplitude contracts by exactly

@@ -81,6 +81,11 @@ class Block:
 		d = self.data
 		return Block([[d[i][j].T for i in range(len(d))] for j in range(len(d[0]))])
 
+	def trace(self):
+		"""scalar trace of a block matrix: the sum of its diagonal leaves' traces,
+		equal to jnp.trace of the flattened matrix (the module invariant)"""
+		return sum(jnp.trace(self.data[i][i]) for i in range(len(self.data)))
+
 
 def beinsum(formula, *blocks):
 	"""A multi-operand block contraction, named by its leaf einsum formula

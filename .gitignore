@@ -6,7 +6,6 @@ __pycache__/
 # generated example output; track only the gifs the readme embeds
 modal_xpbd/examples/*.gif
 modal_xpbd/examples/*.png
-!modal_xpbd/examples/stiffness_sweep.gif
-!modal_xpbd/examples/buckling.gif
+!modal_xpbd/examples/buckling_quad.gif
 !modal_xpbd/examples/swinging_chain.gif
 !modal_xpbd/examples/damping_sweep.gif
