@@ -69,7 +69,7 @@ tip = np.asarray(tip)
 
 fig, (ax, ax_t) = plt.subplots(2, 1, figsize=(10, 7), height_ratios=[2, 1])
 for i, f in enumerate(frames[:: n_frames // 8]):
-	draw_bodies(ax, f, color='b', alpha=0.15 + 0.8 * i / 8)
+	draw_bodies(ax, f, alpha=0.15 + 0.8 * i / 8)
 draw_bodies(ax, bodies, color='r', alpha=0.4)
 ax.autoscale()
 ax.set_aspect('equal')
@@ -88,7 +88,7 @@ fig_anim, ax_anim = plt.subplots(figsize=(8, 2.2))
 def draw_frame(i):
 	ax_anim.clear()
 	draw_bodies(ax_anim, bodies, color='r', alpha=0.25)
-	draw_bodies(ax_anim, frames[i], color='b')
+	draw_bodies(ax_anim, frames[i])
 	ax_anim.set_xlim(-0.5, n_girders * length + 0.5)
 	ax_anim.set_ylim(-1.6, 1.4)
 	ax_anim.set_aspect('equal')

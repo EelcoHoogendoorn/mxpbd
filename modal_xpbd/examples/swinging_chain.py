@@ -63,8 +63,6 @@ shapes = [
 	for i in range(n_girders)
 ]
 shapes[0] = shapes[0].rigid()
-colors = ['dimgray'] + [f'C{i}' for i in range(n_girders - 1)]
-labels = ['rigid'] + [f'EA = {stiffness / 4 ** i:.0e}' for i in range(1, n_girders)]
 bodies = [
 	ModalBody.rest(shape, position=((i + 0.5) * length, 0.0), damping=damping)
 	for i, shape in enumerate(shapes)
@@ -91,11 +89,9 @@ energy, violation = np.asarray(energy), np.asarray(violation)
 
 fig, (ax, ax_e) = plt.subplots(2, 1, figsize=(9, 9), height_ratios=[2, 1])
 for i, f in enumerate(frames[:: n_frames // 12]):
-	for body, color in zip(f, colors):
-		draw_bodies(ax, [body], color=color, alpha=0.1 + 0.85 * i / 12)
+	draw_bodies(ax, f, alpha=0.1 + 0.85 * i / 12)
 ax.autoscale()
 ax.set_aspect('equal')
-ax.legend(handles=[plt.Line2D([], [], color=c, label=l) for c, l in zip(colors, labels)])
 ax.set_title(f'hinged chain released from horizontal; max pin violation {violation.max():.1e}')
 
 t = np.arange(n_frames) * dt * steps_per_frame
@@ -116,8 +112,7 @@ fig_anim, ax_anim = plt.subplots(figsize=(6, 6))
 
 def draw_frame(i):
 	ax_anim.clear()
-	for body, color in zip(frames[i], colors):
-		draw_bodies(ax_anim, [body], color=color)
+	draw_bodies(ax_anim, frames[i])
 	ax_anim.set_xlim(-reach - 1, reach + 1)
 	ax_anim.set_ylim(-reach - 1, reach * 0.3)
 	ax_anim.set_aspect('equal')

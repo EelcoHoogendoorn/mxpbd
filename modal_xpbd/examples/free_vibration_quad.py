@@ -61,7 +61,7 @@ amplitudes = np.asarray(amplitudes)
 
 fig, (ax, ax_t) = plt.subplots(2, 1, figsize=(10, 6), height_ratios=[2, 1])
 for i, f in enumerate(frames[: 60 : 10]):
-	draw_bodies(ax, f, color='b', alpha=0.15 + 0.8 * i / 6)
+	draw_bodies(ax, f, alpha=0.15 + 0.8 * i / 6)
 draw_bodies(ax, bodies, color='r', alpha=0.4)
 ax.autoscale()
 ax.set_aspect('equal')
@@ -81,7 +81,7 @@ fig_anim, ax_anim = plt.subplots(figsize=(6, 2.4))
 def draw_frame(i):
 	ax_anim.clear()
 	draw_bodies(ax_anim, bodies, color='r', alpha=0.25)
-	draw_bodies(ax_anim, frames[i], color='b')
+	draw_bodies(ax_anim, frames[i])
 	ax_anim.set_xlim(-4.0, 4.0)
 	ax_anim.set_ylim(-1.6, 1.6)
 	ax_anim.set_aspect('equal')

@@ -1,13 +1,20 @@
 """minimal matplotlib rendering of modal bodies"""
+from itertools import cycle
+
 import numpy as np
 from matplotlib.collections import LineCollection
 
+# default per-body color cycle: the bodies of a chain alternate so its segments
+# read distinctly; a single body simply takes the first color
+body_colors = ('C0', 'C1')
 
-def draw_bodies(ax, bodies, color='b', alpha=1.0):
-	for i, body in enumerate(bodies):
+
+def draw_bodies(ax, bodies, color=body_colors, alpha=1.0):
+	colors = cycle([color] if isinstance(color, str) else color)
+	for body, c in zip(bodies, colors):
 		points = np.asarray(body.world_points())
 		edges = np.asarray(body.shape.edges)
-		ax.add_collection(LineCollection(points[edges], colors=color, alpha=alpha, linewidths=0.8))
+		ax.add_collection(LineCollection(points[edges], colors=c, alpha=alpha, linewidths=0.8))
 
 
 def save_gif(fig, draw_frame, n_frames, path, fps=25, dpi=80, colors=16, supersample=4):

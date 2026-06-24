@@ -13,23 +13,21 @@ softer in torsion than axially). MXPBD targets that underserved stiff-flexible r
 
 ## Examples
 
-A thin solid steel rod (1m x 4mm), built from 1024 finite elements, crushed by a prescribed end displacement, pops as it crosses its euler
-load. This stiff system is accurately and stably simulated with a large timestep, and only explicit local updates. This requires both multiple bodies as a single linearized modal body would not support buckling, and efficient high stiffness block solves between those modal bodies (per-constraint solving would converge very poorly)
+A thin solid steel rod (1m x 4mm), built from over a thousand finite-element DOFs, linearized into a handful of modal bodies, crushed by a prescribed end displacement, pops at the physically correct time, as it crosses its euler load. This stiff system is accurately and stably simulated with a large timestep, and only explicit local updates. This requires both multiple bodies as a single linearized modal body would not support buckling, and efficient high stiffness block solves between those modal bodies (per-constraint solving would converge very poorly due to geometric stiffness)
 (`buckling_quad.py`):
 
 <img src="./modal_xpbd/examples/buckling_quad.gif" alt="a clamped rod pops as the prescribed end displacement crosses its euler load">
 
 A chain of flexible girders whips through full rotations, demonstrating large angle displacements together with various levels of compliance; zero compliance at the top, but noticeable compliance at the bottom;
-any combination of stiffness ratios will work together efficiently.
+any combination of stiffness ratios will work together efficiently. In being able to model physically realistic small deformations that may be barely perceptible, but crucial to correct dynamics, mxpbd fills the gap between pure rigid bodies, and the impracticality of simulating complex geometries in unreduced form, efficiently and with numerical stability.
 (`swinging_chain.py`):
 
 <img src="./modal_xpbd/examples/swinging_chain.gif" alt="a hinged chain of girders, rigid at the pin to soft at the tip, whips through full rotations">
 
-The same girder bent and released, at damping ratios spanning undamped to overdamped
-creep, all at one and the same timestep, each trace on the analytic damped oscillator
+A compound cantilever of three girders, bent and released, at damping ratios spanning undamped through critical to overdamped — high damping reached by the whole structure, not just one oscillator. Simulating materials with high internal damping in a high-DOF unreduced model can be a source of impractical numerical stiffness; but in reduced modal form compliant and arbitrary high damping materials can be simulated efficiently and with physical realism; a scenario one might encounter in modelling rubber gripper pads for instance.
 (`damping_sweep.py`):
 
-<img src="./modal_xpbd/examples/damping_sweep.gif" alt="the bent girder released at four damping ratios, the overdamped one creeping back slowest">
+<img src="./modal_xpbd/examples/damping_sweep.gif" alt="a three-girder cantilever bent and released at four damping ratios, the overdamped one creeping back slowest">
 
 ## Key ideas
 
@@ -39,7 +37,7 @@ see each mode as a scalar mobility `alpha / (1 + alpha)`, interpolating between 
 limited (soft modes) and immobile (the rigid limit). The dense solve is over the joint
 reactions only, assembled over constraint-body incidences: a modal body has the same
 time complexity as a rigid body in the solve, regardless of its number of modes.
-Contrast with FEM, where every flex DOF lands in the global system,
+Contrast with a direct discretization, where every flex DOF lands in the global system,
 and adds a super-linear cost to the solve.
 
 **Modal stiffness as XPBD compliance.** Each mode contributes one elastic constraint
@@ -52,7 +50,7 @@ integration of modal forces would instead demand `dt < 2 / omega_max`.
 is no such thing as a lumped joint: a hinge line or weld frame is ill-defined on a
 deforming body. Yet to counter geometric stiffness point constraints need to be solvable 
 in a block fashion rather than relaxed one at a time. 
-(girders in the above example are joined by point-pairs solved simultaneously)
+(the rod and cantilever above are joined by point-pairs, solved as one block; the chain's hinges are single pins)
 
 **High frequency unresolved modes are low-passed, not unstable.** Per mode, a substep of the
 projection acts as implicit euler: the amplitude contracts by exactly
@@ -71,13 +69,12 @@ dashpot `2 zeta omega` is discretized implicitly and folded into its mode's cons
 stiffness as it would in direct FEM, no timestep limit, and static equilibria are
 exactly untouched. Contrast pure rigid body PBD, where there is no internal motion to
 damp, and damping typically takes the form of ad hoc velocity terms, motivated by
-solver stability rather than by the material being modelled. Note also that modal damping acts on the flex alone: rigid frame motion
-coasts undamped — visible in the swinging chain, whose energy decays
-in bursts where the whip excites flex, and holds level through the smooth swing phases.
+solver stability rather than by the material being modelled. 
 
 ## Layout
 
 - `truss.py` — 2d truss construction and assembly (numpy; offline)
+- `quad.py` — plane-stress Q4 continuum mesh; a drop-in for `truss.py` in real material units
 - `decompose.py` — modal reduction: free-free eigenmodes, mass-orthonormalized
 - `body.py` — rigid (se2) + modal body state; constant diagonal mass matrix
 - `constraint.py` — point constraints and their jacobians
@@ -87,12 +84,15 @@ in bursts where the whip excites flex, and holds level through the smooth swing 
 - `examples/stiffness_sweep.py` — the same bridge at three stiffness levels, one exactly
   rigid; deflection and period scale with compliance
 - `examples/free_vibration.py` — a kicked free floating body rings at its eigenfrequencies
-- `examples/damping_sweep.py` — the girder bent and released at damping ratios from
-  undamped to overdamped creep; one timestep for all, every trace on the analytic
-  damped oscillator
+- `examples/free_vibration_quad.py` — the same, for a solid (Q4 continuum) strip
+- `examples/damping_sweep.py` — a three-girder cantilever bent and released at damping
+  ratios from undamped through critical to overdamped creep; one timestep for all, the
+  compound structure tracking the analytic damped oscillator
 - `examples/buckling.py` — a clamped beam, rigid against gravity, pops as a prescribed
   end displacement crosses its euler load; geometric nonlinearity a single linearized
   body cannot express
+- `examples/buckling_quad.py` — the same buckle for a solid steel rod in real units
+  (Q4 continuum segments)
 - `examples/swinging_chain.py` — girders hinged by single pins whip through full
   rotations; the large angle regime, with the energy trace as its correctness exhibit.
   The links grade from exactly rigid at the pin to soft at the tip: per-body

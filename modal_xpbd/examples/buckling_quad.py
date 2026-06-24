@@ -109,7 +109,7 @@ bow, applied = np.asarray(bow), np.asarray(applied)
 
 fig, (ax, ax_t) = plt.subplots(2, 1, figsize=(11, 7), height_ratios=[1, 1.4])
 for i, f in enumerate(frames[:: n_frames // 10]):
-	draw_bodies(ax, f, color='b', alpha=0.12 + 0.85 * i / 10)
+	draw_bodies(ax, f, alpha=0.12 + 0.85 * i / 10)
 ax.autoscale()
 ax.set_aspect('equal')
 ax.set_title('steel rod, prescribed end shortening; pop past critical, seeded by rounding noise')
@@ -127,7 +127,7 @@ fig_anim, ax_anim = plt.subplots(figsize=(10, 3))
 
 def draw_frame(i):
 	ax_anim.clear()
-	draw_bodies(ax_anim, frames[i], color='b')
+	draw_bodies(ax_anim, frames[i])
 	ax_anim.set_xlim(-0.05 * span, 1.05 * span)
 	ax_anim.set_ylim(-0.15 * span, 0.15 * span)
 	ax_anim.set_aspect('equal')
